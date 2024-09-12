@@ -1,18 +1,23 @@
 import json
 
 import requests
+import yaml
 
-APP_KEY = APP_KEY
-APP_SECRET = APP_SECRET
+# load config from yaml file
+with open("config.yaml") as f:
+    config = yaml.load(f, Loader=yaml.FullLoader)
+APP_KEY = config["APP_KEY"]
+APP_SECRET = config["APP_SECRET"]
 ACCESS_TOKEN = ""
-URL_BASE = (
-    "https://openapivts.koreainvestment.com:29443"  # 29443 - 모의투자, 9443 - 실전투자
-)
+URL_BASE = config["URL_BASE"]  # 29443 - 모의투자, 9443 - 실전투자
 
 
 # Auth
 def auth():
-    headers = {"content-type": "application/json"}
+    headers = {
+        "content-type": "application/json",
+        "charset": "UTF-8",
+    }
     body = {
         "grant_type": "client_credentials",
         "appkey": APP_KEY,
@@ -23,6 +28,7 @@ def auth():
     res = requests.post(URL, headers=headers, data=json.dumps(body))
 
     global ACCESS_TOKEN
+    # print(res.json())
     ACCESS_TOKEN = res.json()["access_token"]
 
 
@@ -39,7 +45,6 @@ def get_current_price(stock_no):
         "appSecret": APP_SECRET,
         "tr_id": "FHKST01010100",
     }
-
     params = {"fid_cond_mrkt_div_code": "J", "fid_input_iscd": stock_no}
 
     # 호출
@@ -56,4 +61,5 @@ def get_current_price(stock_no):
         return None
 
 
-get_current_price("005930")
+auth()
+print(get_current_price("005930"))
