@@ -196,6 +196,7 @@ def get_inquire_psbl_rvsecncl_lst(
         return dataframe
     elif tr_cont == "F" or tr_cont == "M":  # 다음 페이지 존재하는 경우 자기 호출 처리
         print("Call Next")
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_inquire_psbl_rvsecncl_lst("N", FK100, NK100, dataframe)
 
 

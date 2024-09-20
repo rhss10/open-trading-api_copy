@@ -252,6 +252,7 @@ def get_overseas_order_allcncl(excg_cd="", itm_no="", tr_cont="", FK100="", NK10
         return dataframe
     elif tr_cont == "F" or tr_cont == "M": # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_order_allcncl(excg_cd, itm_no, "N", FK100, NK100, dataframe)
 
 
@@ -327,6 +328,7 @@ def get_overseas_inquire_nccs(excg_cd="", tr_cont="", FK100="", NK100="", datafr
         return dataframe
     elif tr_cont == "F" or tr_cont == "M": # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_inquire_nccs(excg_cd, "N", FK100, NK100, dataframe)
 
 
@@ -442,6 +444,7 @@ def get_overseas_inquire_balance_lst(excg_cd="", crcy_cd="", tr_cont="", FK100="
         return dataframe
     elif tr_cont == "F" or tr_cont == "M": # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_inquire_balance_lst(excg_cd, crcy_cd, "N", FK100, NK100, dataframe)
 
 
@@ -527,6 +530,7 @@ def get_overseas_inquire_ccnl(st_dt="", ed_dt="", ord_dv="00", ccld_dv="00", exc
         return dataframe
     elif tr_cont == "F" or tr_cont == "M": # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_inquire_ccnl(st_dt, ed_dt, ord_dv, ccld_dv, excg_cd, "N", FK100, NK100, dataframe)
 
 
@@ -895,6 +899,7 @@ def get_overseas_inquire_period_profit_output1(excg_cd="", crcy="", itm_no="", s
         return dataframe
     elif tr_cont == "F" or tr_cont == "M":  # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_inquire_period_profit_output1(excg_cd, crcy, itm_no, st_dt, ed_dt, "N", FK100, NK100, dataframe)
 
 
@@ -999,6 +1004,7 @@ def get_overseas_inquire_period_trans(excg_cd="", dvsn="", itm_no="", st_dt="", 
         return dataframe
     elif tr_cont == "F" or tr_cont == "M":  # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_inquire_period_trans(excg_cd, dvsn, itm_no, st_dt, ed_dt, "N", FK100, NK100, dataframe)
 
 
@@ -1122,8 +1128,8 @@ def get_overseas_inquire_paymt_stdr_balance(dv="03", dt="", dvsn="01", inqr_dvsn
 ##############################################################################################
 # [해외주식] 기본시세 > 해외주식 현재체결가
 ##############################################################################################
-def get_overseas_price_quot_search_info(excd="", itm_no="", tr_cont="", dataframe=None):
-    url = '/uapi/overseas-price/v1/quotations/search-info'
+def get_overseas_price_quot_price(excd="", itm_no="", tr_cont="", dataframe=None):
+    url = '/uapi/overseas-price/v1/quotations/price'
     tr_id = "HHDFS00000300" # 해외주식 현재체결가
 
     params = {
@@ -1360,6 +1366,7 @@ def get_overseas_price_quot_countries_holiday(dt="", tr_cont="", FK100="", NK100
         return dataframe
     elif tr_cont == "F" or tr_cont == "M":  # 다음 페이지 존재하는 경우 자기 호출 처리
         print('Call Next')
+        time.sleep(0.1)  # 시스템 안정적 운영을 위하여 반드시 지연 time 필요
         return get_overseas_price_quot_countries_holiday(dt, "N", FK100, NK100, dataframe)
 
 
