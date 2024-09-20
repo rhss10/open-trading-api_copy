@@ -1,8 +1,8 @@
-# 국내주식 실시간 websocket sample
+# 해외주식 실시간 websocket sample
 import websocket
 
 import kis_auth as ka
-import kis_domstk as kb
+import kis_ovrseastk as kb
 
 import os
 import json
@@ -30,10 +30,10 @@ from enum import StrEnum
 
 
 class KIS_WSReq(StrEnum):
-    BID_ASK = 'H0STASP0'   # 실시간 국내주식 호가
-    CONTRACT = 'H0STCNT0'  # 실시간 국내주식 체결
-    NOTICE = 'H0STCNI0'    # 실시간 계좌체결발생통보
-
+    BID_USA = 'HDFSASP0'   # 해외주식 실시간지연호가(미국)
+    BID_ASA = 'HDFSASP1'   # 해외주식 실시간지연호가(아시아)
+    CONTRACT = 'HDFSCNT0'  # 해외주식 실시간지연 체결가
+    NOTICE = 'H0GSCNI0'    # 실시간 해외주식 체결통보
 
 import talib as ta
 
@@ -64,8 +64,8 @@ class RSI_ST:   # RSI(Relative Strength Index, 상대강도지수)라는 주가 
         # print(self)
         dftt = contract_sub_df.get(self._stock_code).copy()
         dftt = dftt.set_index(['TICK_HOUR'])
-        dftt['STCK_PRPR'] = pd.to_numeric(dftt['STCK_PRPR'], errors='coerce').convert_dtypes()
-        np_closes = np.array(dftt['STCK_PRPR'], dtype=np.float64)
+        dftt['LAST'] = pd.to_numeric(dftt['LAST'], errors='coerce').convert_dtypes()
+        np_closes = np.array(dftt['LAST'], dtype=np.float64)
         rsi = ta.RSI(np_closes, self.rsi_period)
 
         last_rsi = rsi[-1]
@@ -86,7 +86,7 @@ ka.auth()
 
 __DEBUG__ = False  # True
 
-# 실시간 국내주식 계좌체결통보 복호화를 위한 부분-start
+# 실시간 해외주식 계좌체결통보 복호화를 위한 부분 - start
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import unpad
 from base64 import b64decode
@@ -104,122 +104,150 @@ def aes_cbc_base64_dec(key, iv, cipher_text):
     return bytes.decode(unpad(cipher.decrypt(b64decode(cipher_text)), AES.block_size))
 
 
-# 실시간 국내주식 계좌체결통보 복호화를 위한 부분 - end
+# 실시간 해외주식 계좌체결통보 복호화를 위한 부분 - end
 
 
-contract_sub_df = dict()  # 실시간 국내주식 체결 결과를 종목별로 저장하기 위한 container
-tr_plans = dict()         # 실시간 국내주식 체결 값에 따라 무언가를 수행할 Class 를 저장하기 위한 container
+contract_sub_df = dict()  # 실시간 해외주식 체결 결과를 종목별로 저장하기 위한 container
+tr_plans = dict()         # 실시간 해외주식 체결 값에 따라 무언가를 수행할 Class 를 저장하기 위한 container
+excg_dict = {
+    'NYS' : 'NYSE',  #미국뉴욕
+    'NAS' : 'NASD',  #미국나스닥
+    'AMS' : 'AMEX',  #미국아멕스
+    'TSE' : 'TKSE',  #일본도쿄
+    'HKS' : 'SEHK',  #홍콩
+    'SHS' : 'SHAA',  #중국상해
+    'SZS' : 'SZAA',  #중국심천
+    'HSX' : 'VNSE',  #베트남호치민,
+    'HNX' : 'HASE',  #베트남하노이
+    'BAY' : 'NYSE',  #미국뉴욕(주간)
+    'BAQ' : 'NASD',  #미국나스닥(주간),
+    'BAA' : 'AMEX'   #미국아멕스(주간)
+}
 
-reserved_cols = ['TICK_HOUR', 'STCK_PRPR', 'ACML_VOL']  # 실시간 국내주식 체결 중 사용할 column 만 추출하기 위한 column 정의
 
-# 실시간 국내주식체결 column header
-contract_cols = ['MKSC_SHRN_ISCD',
-                 'TICK_HOUR',  # pandas time conversion 편의를 위해 이 필드만 이름을 통일한다
-                 'STCK_PRPR',  # 현재가
-                 'PRDY_VRSS_SIGN',  # 전일 대비 부호
-                 'PRDY_VRSS',  # 전일 대비
-                 'PRDY_CTRT',  # 전일 대비율
-                 'WGHN_AVRG_STCK_PRC',  # 가중 평균 주식 가격
-                 'STCK_OPRC',  # 시가
-                 'STCK_HGPR',  # 고가
-                 'STCK_LWPR',  # 저가
-                 'ASKP1',  # 매도호가1
-                 'BIDP1',  # 매수호가1
-                 'CNTG_VOL',  # 체결 거래량
-                 'ACML_VOL',  # 누적 거래량
-                 'ACML_TR_PBMN',  # 누적 거래 대금
-                 'SELN_CNTG_CSNU',  # 매도 체결 건수
-                 'SHNU_CNTG_CSNU',  # 매수 체결 건수
-                 'NTBY_CNTG_CSNU',  # 순매수 체결 건수
-                 'CTTR',  # 체결강도
-                 'SELN_CNTG_SMTN',  # 총 매도 수량
-                 'SHNU_CNTG_SMTN',  # 총 매수 수량
-                 'CCLD_DVSN',  # 체결구분 (1:매수(+), 3:장전, 5:매도(-))
-                 'SHNU_RATE',  # 매수비율
-                 'PRDY_VOL_VRSS_ACML_VOL_RATE',  # 전일 거래량 대비 등락율
-                 'OPRC_HOUR',  # 시가 시간
-                 'OPRC_VRSS_PRPR_SIGN',  # 시가대비구분
-                 'OPRC_VRSS_PRPR',  # 시가대비
-                 'HGPR_HOUR',
-                 'HGPR_VRSS_PRPR_SIGN',
-                 'HGPR_VRSS_PRPR',
-                 'LWPR_HOUR',
-                 'LWPR_VRSS_PRPR_SIGN',
-                 'LWPR_VRSS_PRPR',
-                 'BSOP_DATE',  # 영업 일자
-                 'NEW_MKOP_CLS_CODE',  # 신 장운영 구분 코드
-                 'TRHT_YN',
-                 'ASKP_RSQN1',
-                 'BIDP_RSQN1',
-                 'TOTAL_ASKP_RSQN',
-                 'TOTAL_BIDP_RSQN',
-                 'VOL_TNRT',  # 거래량 회전율
-                 'PRDY_SMNS_HOUR_ACML_VOL',  # 전일 동시간 누적 거래량
-                 'PRDY_SMNS_HOUR_ACML_VOL_RATE',  # 전일 동시간 누적 거래량 비율
-                 'HOUR_CLS_CODE',  # 시간 구분 코드(0 : 장중 )
-                 'MRKT_TRTM_CLS_CODE',
-                 'VI_STND_PRC']
+#reserved_cols = ['TICK_HOUR', 'STCK_PRPR', 'ACML_VOL']  # 실시간 해외주식 체결 중 사용할 수신시간, 현재가, 누적거래량 만 추출하기 위한 column 정의
+reserved_cols = ['TICK_HOUR', 'LAST']  # 실시간 해외주식 체결 중 사용할 column 만 추출하기 위한 column 정의
 
-# 실시간 국내주식호가 column eader
-bid_ask_cols = ['MKSC_SHRN_ISCD',
-                'TICK_HOUR',  # pandas time conversion 편의를 위해 이 필드만 이름을 통일한다
-                'HOUR_CLS_CODE',  # 시간 구분 코드(0 : 장중 )
-                'ASKP1',  # 매도호가1
-                'ASKP2',
-                'ASKP3',
-                'ASKP4',
-                'ASKP5',
-                'ASKP6',
-                'ASKP7',
-                'ASKP8',
-                'ASKP9',
-                'ASKP10',
-                'BIDP1',  # 매수호가1
-                'BIDP2',
-                'BIDP3',
-                'BIDP4',
-                'BIDP5',
-                'BIDP6',
-                'BIDP7',
-                'BIDP8',
-                'BIDP9',
-                'BIDP10',
-                'ASKP_RSQN1',  # 매도호가 잔량1
-                'ASKP_RSQN2',
-                'ASKP_RSQN3',
-                'ASKP_RSQN4',
-                'ASKP_RSQN5',
-                'ASKP_RSQN6',
-                'ASKP_RSQN7',
-                'ASKP_RSQN8',
-                'ASKP_RSQN9',
-                'ASKP_RSQN10',
-                'BIDP_RSQN1',  # 매수호가 잔량1
-                'BIDP_RSQN2',
-                'BIDP_RSQN3',
-                'BIDP_RSQN4',
-                'BIDP_RSQN5',
-                'BIDP_RSQN6',
-                'BIDP_RSQN7',
-                'BIDP_RSQN8',
-                'BIDP_RSQN9',
-                'BIDP_RSQN10',
-                'TOTAL_ASKP_RSQN',  # 총 매도호가 잔량
-                'TOTAL_BIDP_RSQN',  # 총 매수호가 잔량
-                'OVTM_TOTAL_ASKP_RSQN',
-                'OVTM_TOTAL_BIDP_RSQN',
-                'ANTC_CNPR',
-                'ANTC_CNQN',
-                'ANTC_VOL',
-                'ANTC_CNTG_VRSS',
-                'ANTC_CNTG_VRSS_SIGN',
-                'ANTC_CNTG_PRDY_CTRT',
-                'ACML_VOL',  # 누적 거래량
-                'TOTAL_ASKP_RSQN_ICDC',
-                'TOTAL_BIDP_RSQN_ICDC',
-                'OVTM_TOTAL_ASKP_ICDC',
-                'OVTM_TOTAL_BIDP_ICDC',
-                'STCK_DEAL_CLS_CODE']
+# 해외주식 실시간지연체결가 column header
+contract_cols = ['RSYM',	# 실시간종목코드
+                'SYMB',	# 종목코드
+                'ZDIV',	# 수수점자리수
+                'TYMD',	# 현지영업일자
+                'XYMD',	# 현지일자
+                'XHMS',	# 현지시간
+                'KYMD',	# 한국일자
+                'TICK_HOUR',  # pandas time conversion 편의를 위해 이 필드만 이름을 통일한다 'KHMS' 한국시간
+                'OPEN',	# 시가
+                'HIGH',	# 고가
+                'LOW',	# 저가
+                'LAST',	# 현재가
+                'SIGN',	# 대비구분
+                'DIFF',	# 전일대비
+                'RATE',	# 등락율
+                'PBID',	# 매수호가
+                'PASK',	# 매도호가
+                'VBID',	# 매수잔량
+                'VASK',	# 매도잔량
+                'EVOL',	# 체결량
+                'TVOL',	# 거래량
+                'TAMT',	# 거래대금
+                'BIVL',	# 매도체결량
+                'ASVL',	# 매수체결량
+                'STRN',	# 체결강도
+                'MTYP']	# 시장구분 1:장중,2:장전,3:장후
+
+# 실시간 해외주식호가(미국) column eader
+bid_usa_cols = ['RSYM',	 #실시간종목코드
+                'SYMB',	 # 종목코드
+                'ZDIV',	 # 소숫점자리수
+                'XYMD',	 # 현지일자
+                'XHMS',	 # 현지시간
+                'KYMD',	 # 한국일자
+                'TICK_HOUR',  # pandas time conversion 편의를 위해 이 필드만 이름을 통일한다 'KHMS' 한국시간
+                'BVOL',	 # 매수총잔량
+                'AVOL',	 # 매도총잔량
+                'BDVL',	 # 매수총잔량대비
+                'ADVL',	 # 매도총잔량대비
+                'PBID1', # 매수호가1
+                'PASK1', # 매도호가1
+                'VBID1', # 매수잔량1
+                'VASK1', # 매도잔량1
+                'DBID1', # 매수잔량대비1
+                'DASK1', # 매도잔량대비1
+                'PBID2', # 매수호가2
+                'PASK2', # 매도호가2
+                'VBID2', # 매수잔량2
+                'VASK2', # 매도잔량2
+                'DBID2', # 매수잔량대비2
+                'DASK2', # 매도잔량대비2
+                'PBID3', # 매수호가3
+                'PASK3', # 매도호가3
+                'VBID3', # 매수잔량3
+                'VASK3', # 매도잔량3
+                'DBID3', # 매수잔량대비3
+                'DASK3', # 매도잔량대비3
+                'PBID4', # 매수호가4
+                'PASK4', # 매도호가4
+                'VBID4', # 매수잔량4
+                'VASK4', # 매도잔량4
+                'DBID4', # 매수잔량대비4
+                'DASK4', # 매도잔량대비4
+                'PBID5', # 매수호가5
+                'PASK5', # 매도호가5
+                'VBID5', # 매수잔량5
+                'VASK5', # 매도잔량5
+                'DBID5', # 매수잔량대비5
+                'DASK5', # 매도잔량대비5
+                'PBID6', # 매수호가6
+                'PASK6', # 매도호가6
+                'VBID6', # 매수잔량6
+                'VASK6', # 매도잔량6
+                'DBID6', # 매수잔량대비6
+                'DASK6', # 매도잔량대비6
+                'PBID7', # 매수호가7
+                'PASK7', # 매도호가7
+                'VBID7', # 매수잔량7
+                'VASK7', # 매도잔량7
+                'DBID7', # 매수잔량대비7
+                'DASK7', # 매도잔량대비7
+                'PBID8', # 매수호가8
+                'PASK8', # 매도호가8
+                'VBID8', # 매수잔량8
+                'VASK8', # 매도잔량8
+                'DBID8', # 매수잔량대비8
+                'DASK8', # 매도잔량대비8
+                'PBID9', # 매수호가9
+                'PASK9', # 매도호가9
+                'VBID9', # 매수잔량9
+                'VASK9', # 매도잔량9
+                'DBID9', # 매수잔량대비9
+                'DASK9', # 매도잔량대비9
+                'PBID10', #매수호가10
+                'PASK10', #매도호가10
+                'VBID10', #매수잔량10
+                'VASK10', #매도잔량10
+                'DBID10', #매수잔량대비10
+                'DASK10'] #매도잔량대비10
+
+# 실시간 해외주식호가(아시아) column eader
+bid_asa_cols = ['RSYM',	#실시간종목코드
+                'SYMB',	#종목코드
+                'ZDIV',	#소수점자리수
+                'XYMD',	#현지일자
+                'XHMS',	#현지시간
+                'KYMD',	#한국일자
+                'TICK_HOUR',  # pandas time conversion 편의를 위해 이 필드만 이름을 통일한다 'KHMS' 한국시간
+                'BVOL',	#매수총잔량
+                'AVOL',	#매도총잔량
+                'BDVL',	#매수총잔량대비
+                'ADVL',	#매도총잔량대비
+                'PBID1',	#매수호가1
+                'PASK1',	#매도호가1
+                'VBID1',	#매수잔량1
+                'VASK1',	#매도잔량1
+                'DBID1',	#매수잔량대비1
+                'DASK1']	#매도잔량대비1
+
 
 # 실시간 계좌체결발생통보 column header
 notice_cols = ['CUST_ID',  # HTS ID
@@ -228,24 +256,22 @@ notice_cols = ['CUST_ID',  # HTS ID
                'OODER_NO',  # 원주문번호
                'SELN_BYOV_CLS',  # 매도매수구분
                'RCTF_CLS',  # 정정구분
-               'ODER_KIND',  # 주문종류(00 : 지정가,01 : 시장가,02 : 조건부지정가)
-               'ODER_COND',  # 주문조건
+               'ODER_KIND2',  # 주문종류2(1:시장가 2:지정자 6:단주시장가 7:단주지정가 A:MOO B:LOO C:MOC D:LOC)
                'STCK_SHRN_ISCD',  # 주식 단축 종목코드
-               'CNTG_QTY',  # 체결 수량(체결통보(CNTG_YN=2): 체결 수량, 주문·정정·취소·거부 접수 통보(CNTG_YN=1): 주문수량의미)
-               'CNTG_UNPR',  # 체결단가
+               'CNTG_QTY',  # 체결 수량   - 주문통보의 경우 해당 위치에 주문수량이 출력, - 체결통보인 경우 해당 위치에 체결수량이 출력
+               'CNTG_UNPR',  # 체결단가  ※ 주문통보 시에는 주문단가가, 체결통보 시에는 체결단가가 수신 됩니다. ※ 체결단가의 경우, 국가에 따라 소수점 생략 위치가 상이합니다.
+                             # 미국 4 일본 1 중국 3 홍콩 3 베트남 0 EX) 미국 AAPL(현재가 : 148.0100)의 경우 001480100으로 체결단가가 오는데, 4번째 자리에 소수점을 찍어 148.01로 해석하시면 됩니다.
                'STCK_CNTG_HOUR',  # 주식 체결 시간
                'RFUS_YN',  # 거부여부(0 : 승인, 1 : 거부)
                'CNTG_YN',  # 체결여부(1 : 주문,정정,취소,거부,, 2 : 체결 (★ 체결만 볼 경우 2번만 ))
-               'ACPT_YN',  # 접수여부(1 : 주문접수, 2 : 확인 )
+               'ACPT_YN',  # 접수여부(1:주문접수 2:확인 3:취소(FOK/IOC))
                'BRNC_NO',  # 지점
-               'ODER_QTY',  # 주문수량
+               'ODER_QTY',  # 주문수량  - 주문통보인 경우 해당 위치 미출력 (주문통보의 주문수량은 CNTG_QTY 위치에 출력) - 체결통보인 경우 해당 위치에 주문수량이 출력
                'ACNT_NAME',  # 계좌명
                'CNTG_ISNM',  # 체결종목명
-               'CRDT_CLS',  # 신용구분
-               'CRDT_LOAN_DATE',  # 신용대출일자
-               'CNTG_ISNM40',  # 체결종목명40
-               'ODER_PRC'  # 주문가격
-               ]
+               'ODER_COND',	# 해외종목구분
+               'DEBT_GB',  # 담보유형코드  10:현금 15:해외주식담보대출
+               'DEBT_DATE']  # 담보대출일자  대출일(YYYYMMDD)
 
 
 # 웹소켓 접속키 발급
@@ -312,8 +338,8 @@ def unsubscribe(ws, sub_type, app_key, sub_data): # 세션 종목코드(실시�
 def getStreamdDF(stock_code, bar_sz='1Min'):
     df3 = contract_sub_df.get(stock_code).copy()
     df3 = df3.set_index(['TICK_HOUR'])
-    df3['STCK_PRPR'] = pd.to_numeric(df3['STCK_PRPR'], errors='coerce').convert_dtypes()
-    df3 = df3['STCK_PRPR'].resample(bar_sz).ohlc()
+    df3['LAST'] = pd.to_numeric(df3['LAST'], errors='coerce').convert_dtypes()
+    df3 = df3['LAST'].resample(bar_sz).ohlc()
 
     return df3
 
@@ -329,18 +355,20 @@ def _dparse(data):
         tr_id = d1[1]
         if tr_id == KIS_WSReq.CONTRACT:  # 실시간체결
             hcols = contract_cols
-        elif tr_id == KIS_WSReq.BID_ASK: # 실시간호가
-            hcols = bid_ask_cols
+        elif tr_id == KIS_WSReq.BID_USA: # 해외주식 실시간지연호가(미국)
+            hcols = bid_usa_cols
+        elif tr_id == KIS_WSReq.BID_ASA: # 해외주식 실시간지연호가(아시아)
+            hcols = bid_asa_cols
         elif tr_id == KIS_WSReq.NOTICE:  # 계좌체결통보
             hcols = notice_cols
         else:
             pass
 
-        if tr_id in (KIS_WSReq.CONTRACT, KIS_WSReq.BID_ASK):  # 실시간체결, 실시간호가
+        if tr_id in (KIS_WSReq.CONTRACT, KIS_WSReq.BID_USA, KIS_WSReq.BID_ASA):  # 실시간체결, 실시간지연호가(미국), 실시간지연호가(아시아)
             dp_ = pd.read_csv(StringIO(d1[3]), header=None, sep='^', names=hcols, dtype=object)  # 수신데이터 parsing
-
+            
             print(dp_)  # 실시간체결, 실시간호가 수신 데이터 파싱 결과 확인
-
+            
             dp_['TICK_HOUR'] = _today__ + dp_['TICK_HOUR']    # 수신시간
             dp_['TICK_HOUR'] = pd.to_datetime(dp_['TICK_HOUR'], format='%Y%m%d%H%M%S', errors='coerce')
         else:  # 실시간 계좌체결발생통보는 암호화되어서 수신되므로 복호화 과정이 필요
@@ -366,21 +394,27 @@ def _dparse(data):
 
             ######### 이 부분에서 로직을 적용한 후 매수/매도를 수행하면 될 듯!!
 
-            val1 =  dp_['STCK_PRPR'].tolist()[0]
-            tr_plans[stock_code].push(int(val1))  # 이동평균값 활용
+            val1 =  dp_['LAST'].tolist()[0]
+            tr_plans[stock_code].push(float(val1))  # 이동평균값 활용
             # tr_plans[stock_code].eval()         # RSI(Relative Strength Index, 상대강도지수)라는 주가 지표 계산 활용
 
+            excg_df = excg_dict[stock_code[1:4]]  # 해외거래소코드(3자리) 주문API 사용가능 해외거래소코드(4자리) 변환
+            stock_df =  dp_['SYMB'].tolist()[0]   # 종목코드
             # [국내주식] 주문/계좌 > 매수가능조회 (종목번호 5자리 + 종목단가) REST API
-            rt_data = kb.get_inquire_psbl_order(pdno=stock_code, ord_unpr=val1)
-            ord_qty = rt_data.loc[0, 'nrcvb_buy_qty']  # nrcvb_buy_qty	미수없는매수수량
-            print("[미수없는매수주문가능수량!] : " + ord_qty)
+            #rt_data = kb.get_inquire_psbl_order(pdno=stock_code, ord_unpr=val1, itm_no="TSLA")
+            rt_data = kb.get_overseas_inquire_psamount(excg=excg_df, itm_no=stock_df)
+            ord_qty = rt_data.loc[0, 'ord_psbl_qty']  # ord_psbl_qty	주문가능수량 또는 외화인 경우 max_ord_psbl_qty	최대주문가능수량
+            print("[주문가능수량!] : " + ord_qty)
 
-            # 국내주식 현금 주문
-            # rt_data = kb.get_order_cash(ord_dv="buy",itm_no=stock_code, qty=ord_qty, unpr=val1)
+            ###########################################################
+            # 해외주식(미국) 현금 주문
+            # rt_data = kb.get_overseas_order(ord_dv="buy", excg_cd=excg_df, itm_no=stock_df, qty=1, unpr=123.3)
+            # print(rt_data.KRX_FWDG_ORD_ORGNO + "+" + rt_data.ODNO + "+" + rt_data.ORD_TMD) # 주문접수조직번호+주문접수번호+주문시각
+            # 해외주식(미국) 현금 주문(주간)
+            # rt_data = kb.get_overseas_daytime_order(ord_dv="buy", excg_cd=excg_df, itm_no=stock_df, qty=1, unpr=123.3)
             # print(rt_data.KRX_FWDG_ORD_ORGNO + "+" + rt_data.ODNO + "+" + rt_data.ORD_TMD) # 주문접수조직번호+주문접수번호+주문시각
             print("매수/매도 조건 주문 : " + val1)
-
-            #########################################################
+            ###########################################################
 
         elif tr_id == KIS_WSReq.NOTICE:  # 체결통보의 경우, 일단 executed_df 에만 저장해 둠
             if __DEBUG__: print(dp_.to_string(header=False, index=False))
@@ -451,6 +485,7 @@ def on_message(ws, data):
                 tr_plans[rsp.tr_key] = BasicPlan(rsp.tr_key)   # 이동 평균선 계산 (웹소켓 프로그램 실행시 수집된 데이터만 반영)
                 # tr_plans[rsp.tr_key] = RSI_ST(rsp.tr_key)    # RSI(Relative Strength Index, 상대강도지수)라는 주가 지표 계산
                 ########################################################################
+
             elif (rsp.isUnSub):
                 del (contract_sub_df[rsp.tr_key])
             else:
@@ -460,22 +495,25 @@ def on_message(ws, data):
 def on_error(ws, error):
     print('error=', error)
 
-
 def on_close(ws, status_code, close_msg):
     print('on_close close_status_code=', status_code, " close_msg=", close_msg)
 
 
 def on_open(ws):
     # stocks 에는 40개까지만 가능
-    stocks = ('009540', '012630', '052300', '089860', '218410', '330590', '357550', '419080', '348370')
+    stocks = ('RBAQAAPL', 'RBAQTSLA', 'RBAQAMZN', 'RBAQNVDA', 'RBAQINTC', 'RBAQMSFT')   # 미국주식 주간거래
+    #stocks = ('DNASAAPL', 'DNASTSLA', 'DNASAMZN', 'DNASNVDA', 'DNASINTC', 'DNASMSFT')  # 미국주식 야간거래(정규시장)
     for scode in stocks:
-        subscribe(ws, KIS_WSReq.BID_ASK, _connect_key, scode)       # 실시간 호가
+        subscribe(ws, KIS_WSReq.BID_USA, _connect_key, scode)       # 실시간 호가(미국)
+        #subscribe(ws, KIS_WSReq.BID_USA, _connect_key, scode)      # 실시간 호가(아시아)
         subscribe(ws, KIS_WSReq.CONTRACT, _connect_key, scode)      # 실시간 체결
 
-    # unsubscribe(ws, KIS_WSReq.CONTRACT, _connect_key, "005930")   #실시간 체결 해제
-    # subscribe(ws, KIS_WSReq.BID_ASK, _connect_key, "005930")      #실시간 호가
+    # unsubscribe(ws, KIS_WSReq.CONTRACT, _connect_key, "RBAQAAPL")   #실시간 체결 연결해제
+    # subscribe(ws, KIS_WSReq.CONTRACT, _connect_key, "RBAQAAPL")     #실시간 체결 연결등록
+    # unsubscribe(ws, KIS_WSReq.BID_USA, _connect_key, "RBAQAAPL")    #실시간 호가(미국) 연결해제
+    # subscribe(ws, KIS_WSReq.BID_USA, _connect_key, "RBAQAAPL")      #실시간 호가(미국) 연결등록
     # 실시간 계좌체결발생통보를 등록한다. 계좌체결발생통보 결과는 executed_df 에 저장된다.
-    subscribe(ws, KIS_WSReq.NOTICE, _connect_key, "HTS ID 입력") # HTS ID 입력
+    subscribe(ws, KIS_WSReq.NOTICE, _connect_key, "HTS ID 입력") # HTS ID 입력 계좌체결발생통보
 
 
 ws = websocket.WebSocketApp("ws://ops.koreainvestment.com:21000/tryitout",
